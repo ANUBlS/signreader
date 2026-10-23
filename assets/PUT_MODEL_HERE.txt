@@ -1,0 +1,1 @@
+Put model.tflite and labels.txt here (output of: python training/az_signs.py export ...)

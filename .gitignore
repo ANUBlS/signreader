@@ -1,0 +1,23 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+.idea/
+.vscode/
+pubspec.lock
+
+# Python / training
+__pycache__/
+*.pyc
+runs/
+datasets/
+*.pt
+az_raw_frames/
+flutter_assets/
+
+# Secrets
+*.env
+kaggle.json

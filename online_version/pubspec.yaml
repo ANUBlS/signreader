@@ -1,0 +1,23 @@
+name: road_sign_ru
+description: Распознавание дорожных знаков с озвучкой на русском.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  camera: ^0.11.0
+  flutter_tts: ^4.0.2
+  http: ^1.2.1
+  wakelock_plus: ^1.2.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
