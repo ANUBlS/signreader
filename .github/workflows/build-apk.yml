@@ -10,6 +10,7 @@ on:
       - '**.md'
       - 'training/**'
       - '.github/workflows/train-model.yml'
+      - '.github/workflows/check-kaggle.yml'
   workflow_dispatch:
   workflow_run:
     workflows: ["Train model"]

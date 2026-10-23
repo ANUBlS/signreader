@@ -1,0 +1,66 @@
+name: Check Kaggle access
+
+# Quick test that the KAGGLE_USERNAME / KAGGLE_KEY secrets work and the RTSD dataset is reachable.
+# Lists the dataset's files only (no download). The result is published as the "kaggle-check" release.
+# Run manually: Actions → Check Kaggle access → Run workflow.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/check-kaggle.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+      KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - run: pip install -q kaggle
+
+      - name: Test Kaggle login and dataset access
+        run: |
+          {
+            echo "# Kaggle check — $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo
+            if [ -z "$KAGGLE_USERNAME" ]; then echo "- KAGGLE_USERNAME: **MISSING**"; else echo "- KAGGLE_USERNAME: set (${#KAGGLE_USERNAME} chars)"; fi
+            if [ -z "$KAGGLE_KEY" ]; then echo "- KAGGLE_KEY: **MISSING**"; else echo "- KAGGLE_KEY: set (${#KAGGLE_KEY} chars, expected 32)"; fi
+            echo
+            if [ -n "$KAGGLE_USERNAME" ] && [ -n "$KAGGLE_KEY" ]; then
+              echo '## Dataset files (watchman/rtsd-dataset)'
+              echo '```'
+              if kaggle datasets files watchman/rtsd-dataset --page-size 200 2>&1 | sed "s/$KAGGLE_KEY/***/g"; then
+                echo '```'
+                echo
+                echo "RESULT: OK"
+              else
+                echo '```'
+                echo
+                echo "RESULT: FAILED"
+              fi
+            else
+              echo "RESULT: SECRETS MISSING"
+            fi
+          } > kaggle-check.md 2>&1
+          cat kaggle-check.md
+
+      - name: Publish result
+        if: always()
+        run: |
+          [ -f kaggle-check.md ] || echo "RESULT: WORKFLOW ERROR" > kaggle-check.md
+          gh release delete kaggle-check --yes --cleanup-tag || true
+          gh release create kaggle-check kaggle-check.md --prerelease \
+            --title "Kaggle check" --notes-file kaggle-check.md --target "$GITHUB_SHA"
