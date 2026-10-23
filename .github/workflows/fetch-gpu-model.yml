@@ -1,0 +1,125 @@
+name: Fetch GPU model
+
+# Every 20 minutes: if the Kaggle notebook "signreader-train" finished a run we haven't
+# fetched yet, publish its model to "model-latest" and rebuild the APK.
+# If it failed, publish its log to the "gpu-train" release.
+
+on:
+  schedule:
+    - cron: '*/20 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fetch-gpu-model
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      new_model: ${{ steps.check.outputs.new_model }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+      KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Anything launched?
+        id: launched
+        run: |
+          if gh release download gpu-train -p launch-stamp.txt -O launch-stamp.txt 2>/dev/null; then
+            echo "stamp=$(cat launch-stamp.txt)" >> "$GITHUB_OUTPUT"
+          else
+            echo "No GPU training launched yet."
+            echo "stamp=" >> "$GITHUB_OUTPUT"
+          fi
+          gh release download gpu-train -p handled-stamp.txt -O handled-stamp.txt 2>/dev/null || echo "" > handled-stamp.txt
+          echo "handled=$(cat handled-stamp.txt)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v6
+        if: steps.launched.outputs.stamp != '' && steps.launched.outputs.stamp != steps.launched.outputs.handled
+        with:
+          python-version: '3.11'
+
+      - name: Check notebook
+        id: check
+        if: steps.launched.outputs.stamp != '' && steps.launched.outputs.stamp != steps.launched.outputs.handled
+        env:
+          STAMP: ${{ steps.launched.outputs.stamp }}
+        run: |
+          pip install -q kaggle
+          ST=$(kaggle kernels status "${KAGGLE_USERNAME}/signreader-train" 2>&1 || true)
+          echo "$ST"
+          case "$(echo "$ST" | tr 'A-Z' 'a-z')" in
+            *complete*) STATE=complete ;;
+            *error*|*fail*|*cancel*) STATE=error ;;
+            *) echo "Still running / queued."; echo "new_model=false" >> "$GITHUB_OUTPUT"; exit 0 ;;
+          esac
+
+          mkdir -p kout
+          kaggle kernels output "${KAGGLE_USERNAME}/signreader-train" -p kout 2>&1 | tail -5 || true
+          find kout -maxdepth 3 -type f | head -50
+          GOT=$(cat $(find kout -name stamp.txt | head -1) 2>/dev/null || echo "")
+          echo "notebook stamp: $GOT   launched stamp: $STAMP"
+          if [ "$GOT" != "$STAMP" ]; then
+            echo "Output is from an older run; waiting."
+            echo "new_model=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+
+          MODEL=$(find kout -name model.tflite | head -1)
+          LOG=$(find kout -maxdepth 2 -name '*.log' | head -1)
+          PROG=$(find kout -name progress.log | head -1)
+          {
+            echo "Run $STAMP: **$STATE**"
+            echo
+            echo '```'
+            [ -n "$PROG" ] && tail -40 "$PROG"
+            echo '```'
+          } > status.md
+          [ -n "$LOG" ] && tail -c 60000 "$LOG" > notebook-log.txt || echo "no log" > notebook-log.txt
+          echo "$STAMP" > handled-stamp.txt
+          [ -s launch-stamp.txt ] || echo "$STAMP" > launch-stamp.txt
+
+          if [ "$STATE" = complete ] && [ -n "$MODEL" ]; then
+            D=$(dirname "$MODEL")
+            METRICS=$(python - "$D/results.csv" <<'EOF'
+          import csv, sys
+          try:
+              rows = list(csv.DictReader(open(sys.argv[1])))
+              r = {k.strip(): v for k, v in rows[-1].items()}
+              best = max(float({k.strip(): v for k, v in x.items()}['metrics/mAP50(B)']) for x in rows)
+              print(f"epochs: {len(rows)}, best mAP50: {best:.3f}, last mAP50-95: {float(r['metrics/mAP50-95(B)']):.3f}")
+          except Exception:
+              print("metrics unavailable")
+          EOF
+          )
+            {
+              echo "GPU model (Kaggle) — run $STAMP. $METRICS"
+              echo
+              echo "- model.tflite + labels.txt: bundled into the offline APK automatically"
+              echo "- rtsd_best.pt: use as --weights for autolabel / fine-tuning on Azerbaijani frames"
+            } > model-notes.md
+            cp "$D/stamp.txt" stamp.txt
+            FILES="$D/model.tflite $D/labels.txt stamp.txt"
+            [ -f "$D/rtsd_best.pt" ] && FILES="$FILES $D/rtsd_best.pt"
+            [ -f "$D/results.csv" ] && FILES="$FILES $D/results.csv"
+            .github/scripts/publish_release.sh model-latest "Model (latest)" model-notes.md $FILES
+            echo "new_model=true" >> "$GITHUB_OUTPUT"
+            echo "$METRICS" >> status.md
+          else
+            echo "new_model=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          .github/scripts/publish_release.sh gpu-train "GPU training (status)" status.md \
+            launch-stamp.txt handled-stamp.txt notebook-log.txt
+
+  build:
+    needs: fetch
+    if: needs.fetch.outputs.new_model == 'true'
+    uses: ./.github/workflows/build-apk.yml
+    secrets: inherit
