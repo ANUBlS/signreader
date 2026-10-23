@@ -4,29 +4,12 @@ Reads road signs from the phone camera and announces them aloud in Russian.
 
 ## Setup
 
+The `android/` project is included (camera, internet and wake-lock permissions already set).
+You need **Flutter 3.47+**.
+
 ```bash
-flutter create --org az.sabuhi --platforms android,ios road_sign_ru
-# then replace lib/main.dart and pubspec.yaml with the files from here
-cd road_sign_ru
+cd signreader/online_version
 flutter pub get
-```
-
-### Android: `android/app/src/main/AndroidManifest.xml`
-Add these lines inside `<manifest>`, before `<application>`:
-```xml
-<uses-permission android:name="android.permission.CAMERA"/>
-<uses-permission android:name="android.permission.INTERNET"/>
-<uses-permission android:name="android.permission.WAKE_LOCK"/>
-<queries>
-    <intent><action android:name="android.intent.action.TTS_SERVICE"/></intent>
-</queries>
-```
-In `android/app/build.gradle`, set `minSdkVersion 21` or higher.
-
-### iOS: `ios/Runner/Info.plist`
-```xml
-<key>NSCameraUsageDescription</key>
-<string>Камера нужна для распознавания дорожных знаков</string>
 ```
 
 ## Run

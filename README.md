@@ -86,37 +86,32 @@ Download `model.tflite` and `labels.txt` and copy them into `assets/`.
 
 ---
 
-## 2. Build the app
+## 2. Build the app (Android)
+
+The `android/` project is already in the repo, with camera, wake-lock and TTS permissions,
+`minSdk 26` and uncompressed `.tflite` set. You need **Flutter 3.47+** (`flutter upgrade`).
 
 ```bash
-flutter create --org az.sabuhi --platforms android,ios road_sign_offline
-# copy lib/, assets/, pubspec.yaml from here over the generated project
-cd road_sign_offline && flutter pub get
+git clone https://github.com/ANUBlS/signreader.git
+cd signreader
+# copy your trained model.tflite + labels.txt into assets/
+flutter pub get
+flutter run --release        # phone connected via USB with USB debugging on
+# or build an APK to install:
+flutter build apk --release  # → build/app/outputs/flutter-apk/app-release.apk
 ```
 
-**Android** — `android/app/src/main/AndroidManifest.xml`, inside `<manifest>`:
-```xml
-<uses-permission android:name="android.permission.CAMERA"/>
-<uses-permission android:name="android.permission.WAKE_LOCK"/>
-<queries>
-    <intent><action android:name="android.intent.action.TTS_SERVICE"/></intent>
-</queries>
-```
-`android/app/build.gradle`: `minSdkVersion 26`, and inside `android { }` add
-```groovy
-aaptOptions { noCompress 'tflite' }
-```
+The app builds even without a model. It then shows "Модель не загружена" (model not loaded)
+on screen, which is useful to check that the camera and voice work.
 
-**iOS** — `ios/Runner/Info.plist`:
+> On an older Flutter, regenerate the Android folder: `rm -rf android && flutter create --platforms android .`,
+> then re-add the CAMERA / WAKE_LOCK permissions, the TTS `<queries>` intent, `minSdk = 26`
+> and `androidResources { noCompress.add("tflite") }` (compare with this repo's `android/`).
+
+**iOS** isn't included. Run `flutter create --platforms ios .` and add to `ios/Runner/Info.plist`:
 ```xml
 <key>NSCameraUsageDescription</key>
 <string>Камера нужна для распознавания дорожных знаков</string>
-```
-
-Run it:
-```bash
-flutter run --release        # always test in release, debug is several times slower
-flutter build apk --release
 ```
 
 ---

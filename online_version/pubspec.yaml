@@ -1,4 +1,4 @@
-name: road_sign_ru
+name: signreader_online
 description: Распознавание дорожных знаков с озвучкой на русском.
 publish_to: 'none'
 version: 1.0.0+1
