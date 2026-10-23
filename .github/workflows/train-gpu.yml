@@ -43,50 +43,19 @@ jobs:
         with:
           python-version: '3.11'
 
-      - run: pip install -q kaggle
-
-      - name: Build Kaggle notebook
+      - name: Build and push Kaggle notebook
         run: |
+          set +e
           STAMP="$(date -u +%Y%m%dT%H%M%SZ)-${GITHUB_SHA::7}"
           echo "STAMP=$STAMP" >> "$GITHUB_ENV"
-          mkdir -p kernel
-          # az_signs.py without its CLI entry point + the Kaggle driver
-          python - <<'EOF'
-          import os
-          src = open("training/az_signs.py", encoding="utf-8").read()
-          tail = 'if __name__ == "__main__":\n    main()\n'
-          assert src.rstrip().endswith(tail.rstrip()), "unexpected az_signs.py ending"
-          src = src.rstrip()[: -len(tail.rstrip())]
-          drv = open("training/kaggle_driver.py", encoding="utf-8").read()
-          drv = (drv.replace("__HOURS__", os.environ["HOURS"])
-                    .replace("__IMGSZ__", os.environ["IMGSZ"])
-                    .replace("__STAMP__", os.environ["STAMP"]))
-          open("kernel/kernel.py", "w", encoding="utf-8").write(src + "\n\n" + drv)
-          EOF
-          cat > kernel/kernel-metadata.json <<EOF
-          {
-            "id": "${KAGGLE_USERNAME}/signreader-train",
-            "title": "signreader-train",
-            "code_file": "kernel.py",
-            "language": "python",
-            "kernel_type": "script",
-            "is_private": true,
-            "enable_gpu": true,
-            "enable_internet": true,
-            "dataset_sources": ["watchman/rtsd-dataset"],
-            "competition_sources": [],
-            "kernel_sources": []
-          }
-          EOF
-          python -m py_compile kernel/kernel.py
-          ls -la kernel
-
-      - name: Push notebook to Kaggle
-        run: |
-          kaggle kernels push -p kernel 2>&1 | tee push.log || true
-          grep -qiE "error|invalid|not authori" push.log && exit 1 || true
-          sleep 30
-          kaggle kernels status "${KAGGLE_USERNAME}/signreader-train" 2>&1 | tee status.log
+          export STAMP
+          bash .github/scripts/launch_kaggle.sh > launch.log 2>&1
+          rc=$?
+          echo "exit code: $rc" >> launch.log
+          # never publish the key, even if a tool echoed it
+          sed -i "s/${KAGGLE_KEY}/***/g" launch.log
+          cat launch.log
+          exit $rc
 
       - name: Record launch
         if: always()
@@ -96,8 +65,9 @@ jobs:
             echo "Hours: $HOURS, imgsz: $IMGSZ"
             echo
             echo '```'
-            cat push.log status.log 2>/dev/null || true
+            tail -60 launch.log 2>/dev/null || echo "(no launch.log)"
             echo '```'
           } > launch.md
           echo "$STAMP" > launch-stamp.txt
-          .github/scripts/publish_release.sh gpu-train "GPU training (status)" launch.md launch-stamp.txt
+          [ -f launch.log ] || echo "(no log)" > launch.log
+          .github/scripts/publish_release.sh gpu-train "GPU training (status)" launch.md launch-stamp.txt launch.log
