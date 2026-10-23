@@ -34,7 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - run: mkdir -p logs
+      - run: mkdir -p logs && echo started > logs/started.log
 
       - name: Download trained model (if one exists)
         run: |
@@ -97,15 +97,14 @@ jobs:
           For offline voice: Settings → Text-to-speech → Google → Install voice data → Russian.
           EOF
           sed -i 's/^          //' notes.md
-          gh release delete apk-latest --yes --cleanup-tag || true
-          gh release create apk-latest signreader-offline.apk signreader-online.apk \
-            --prerelease --title "APK (latest build)" --notes-file notes.md --target "$GITHUB_SHA"
+          .github/scripts/publish_release.sh apk-latest "APK (latest build)" notes.md \
+            signreader-offline.apk signreader-online.apk
 
       - name: Publish logs on failure
         if: failure()
         run: |
           tar czf build-logs.tgz logs
           for f in logs/*.log; do tail -c 60000 "$f" > "$f.tail.txt"; done
-          gh release delete build-logs --yes --cleanup-tag || true
-          gh release create build-logs build-logs.tgz logs/*.tail.txt --prerelease \
-            --title "Build logs (last failure)" --notes "Commit ${GITHUB_SHA::7}" --target "$GITHUB_SHA"
+          echo "Failed build of commit ${GITHUB_SHA::7}" > logs-notes.md
+          .github/scripts/publish_release.sh build-logs "Build logs (last failure)" logs-notes.md \
+            build-logs.tgz logs/*.tail.txt

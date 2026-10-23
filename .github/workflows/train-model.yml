@@ -109,13 +109,14 @@ jobs:
               print("metrics unavailable")
           EOF
           )
-          gh release delete model-latest --yes --cleanup-tag || true
-          gh release create model-latest out/model.tflite out/labels.txt out/rtsd_best.pt out/results.csv \
-            --prerelease --title "Model (latest)" \
-            --notes "Starter model trained on RTSD for $HOURS h on CPU, imgsz $IMGSZ. ${MAP}
+          cat > model-notes.md <<EOF
+          Starter model trained on RTSD for $HOURS h on CPU, imgsz $IMGSZ. ${MAP}
 
           - model.tflite + labels.txt: bundled into the offline APK automatically
-          - rtsd_best.pt: use as --weights for autolabel / fine-tuning on Azerbaijani frames (README stage 2)"
+          - rtsd_best.pt: use as --weights for autolabel / fine-tuning on Azerbaijani frames (README stage 2)
+          EOF
+          .github/scripts/publish_release.sh model-latest "Model (latest)" model-notes.md \
+            out/model.tflite out/labels.txt out/rtsd_best.pt out/results.csv
 
       - name: Upload training logs
         if: always()
