@@ -83,7 +83,7 @@ jobs:
 
       - name: Push notebook to Kaggle
         run: |
-          kaggle kernels push -p kernel 2>&1 | tee push.log
+          kaggle kernels push -p kernel 2>&1 | tee push.log || true
           grep -qiE "error|invalid|not authori" push.log && exit 1 || true
           sleep 30
           kaggle kernels status "${KAGGLE_USERNAME}/signreader-train" 2>&1 | tee status.log
@@ -96,7 +96,7 @@ jobs:
             echo "Hours: $HOURS, imgsz: $IMGSZ"
             echo
             echo '```'
-            cat push.log status.log 2>/dev/null
+            cat push.log status.log 2>/dev/null || true
             echo '```'
           } > launch.md
           echo "$STAMP" > launch-stamp.txt
