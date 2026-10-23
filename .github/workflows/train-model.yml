@@ -1,0 +1,121 @@
+name: Train model
+
+# Trains a STARTER model on the Russian RTSD dataset (Azerbaijani signs share the same
+# designs and numbering) on GitHub's free CPU runner, exports TFLite and publishes it as
+# the "model-latest" release. "Build APK" then runs automatically and bundles it.
+#
+# One-time setup (Settings → Secrets and variables → Actions → New repository secret):
+#   KAGGLE_USERNAME  — your Kaggle username
+#   KAGGLE_KEY       — from kaggle.com → Settings → API → Create New Token (kaggle.json "key")
+#
+# CPU training is limited to a few hours, so this model is a starting point. For a much better
+# one, train on a GPU (Colab) and fine-tune on your own Azerbaijani dashcam frames (README).
+
+on:
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: 'Training time limit in hours (GitHub jobs stop at 6h total)'
+        default: '4.0'
+      imgsz:
+        description: 'Image size (640 = more accurate, 480 = faster on the phone)'
+        default: '640'
+      fraction:
+        description: 'Fraction of RTSD to use (1.0 = all)'
+        default: '1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      GH_TOKEN: ${{ github.token }}
+      KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+      KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+      WORK: /mnt/work
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Kaggle secrets
+        run: |
+          if [ -z "$KAGGLE_USERNAME" ] || [ -z "$KAGGLE_KEY" ]; then
+            echo "::error::Add KAGGLE_USERNAME and KAGGLE_KEY in Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo mkdir -p "$WORK" && sudo chown "$USER" "$WORK"
+          df -h / /mnt
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install training tools (CPU)
+        run: |
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install ultralytics kaggle
+
+      - name: Download RTSD from Kaggle
+        run: |
+          kaggle datasets download -d watchman/rtsd-dataset -p "$WORK/rtsd" --unzip
+          rm -f "$WORK"/rtsd/*.zip
+          du -sh "$WORK/rtsd"; ls "$WORK/rtsd"
+          df -h /mnt
+
+      - name: Convert to YOLO format
+        run: python training/az_signs.py rtsd --rtsd-root "$WORK/rtsd" --out "$WORK/ds"
+
+      - name: Train
+        run: |
+          python training/az_signs.py train \
+            --data "$WORK/ds/data.yaml" --weights yolo11n.pt \
+            --imgsz ${{ inputs.imgsz }} --batch 16 --workers 4 --device cpu \
+            --time ${{ inputs.hours }} --epochs 300 --patience 0 \
+            --fraction ${{ inputs.fraction }} \
+            --project "$WORK/runs" --name rtsd
+
+      - name: Export TFLite
+        run: |
+          python training/az_signs.py export --weights "$WORK/runs/rtsd/weights/best.pt" \
+            --imgsz ${{ inputs.imgsz }} --out out
+          cp "$WORK/runs/rtsd/weights/best.pt" out/rtsd_best.pt
+          cp "$WORK/runs/rtsd/results.csv" out/results.csv || true
+          ls -la out
+
+      - name: Publish model release
+        run: |
+          MAP=$(python - <<'EOF'
+          import csv
+          try:
+              rows = list(csv.DictReader(open("out/results.csv")))
+              r = {k.strip(): v for k, v in rows[-1].items()}
+              print(f"epochs: {len(rows)}, mAP50: {float(r['metrics/mAP50(B)']):.3f}, mAP50-95: {float(r['metrics/mAP50-95(B)']):.3f}")
+          except Exception as e:
+              print("metrics unavailable")
+          EOF
+          )
+          gh release delete model-latest --yes --cleanup-tag || true
+          gh release create model-latest out/model.tflite out/labels.txt out/rtsd_best.pt out/results.csv \
+            --prerelease --title "Model (latest)" \
+            --notes "Starter model trained on RTSD for ${{ inputs.hours }} h on CPU, imgsz ${{ inputs.imgsz }}. ${MAP}
+
+          - model.tflite + labels.txt: bundled into the offline APK automatically
+          - rtsd_best.pt: use as --weights for autolabel / fine-tuning on Azerbaijani frames (README stage 2)"
+
+      - name: Upload training logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: training-run
+          path: |
+            ${{ env.WORK }}/runs/rtsd/*.csv
+            ${{ env.WORK }}/runs/rtsd/*.png
+            ${{ env.WORK }}/runs/rtsd/args.yaml
+          if-no-files-found: ignore

@@ -4,14 +4,38 @@
 
 Detects road signs **on the phone itself** (YOLO + TFLite) and announces them in Russian with the phone's built-in voice. No internet needed while driving.
 
+## Quick start (no computer setup needed)
+
+### 1. Install the APK
+On your phone open **https://github.com/ANUBlS/signreader/releases/tag/apk-latest** and tap
+`signreader-offline.apk` (or `signreader-online.apk`). Allow "Install unknown apps" when asked.
+GitHub rebuilds the APKs automatically on every push.
+
+### 2. Train the starter model (one time, ~5 hours, runs on GitHub)
+1. Create a free account on **kaggle.com** → *Settings* → *API* → **Create New Token**. This downloads `kaggle.json`.
+2. In this repo go to **Settings → Secrets and variables → Actions → New repository secret** and add:
+   - `KAGGLE_USERNAME` = the `username` value from `kaggle.json`
+   - `KAGGLE_KEY` = the `key` value from `kaggle.json`
+3. Go to **Actions → Train model → Run workflow**.
+
+When it finishes, the model appears under **Releases → model-latest**. "Build APK" then runs
+automatically and the new `signreader-offline.apk` can read signs. Reinstall it from step 1.
+
+This starter model trains on Russian signs only, on a CPU, for a few hours. It recognises
+common signs, but for good accuracy on Azerbaijani roads do stage 2 below with your own dashcam video.
+
+---
+
 ```
-road_sign_offline/
+signreader/
 ├── lib/
 │   ├── main.dart          camera, UI, confirmation logic, speech queue
 │   ├── detector.dart      background isolate: YUV/BGRA → letterbox → TFLite → NMS
 │   └── sign_phrases.dart  sign code (3.24, 2.1 …) → Russian phrase
 ├── assets/                ← put model.tflite + labels.txt here (from training)
 ├── training/az_signs.py   whole training pipeline
+├── online_version/       Claude API version (needs internet)
+├── .github/workflows/     build-apk.yml (APK) · train-model.yml (model)
 └── pubspec.yaml
 ```
 

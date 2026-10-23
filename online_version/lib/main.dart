@@ -7,10 +7,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
-// Ключ передаётся при сборке: --dart-define=ANTHROPIC_API_KEY=sk-ant-...
-const String apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
+// Ключ вводится в приложении (кнопка 🔑) и хранится на телефоне.
+// Можно также задать при сборке: --dart-define=ANTHROPIC_API_KEY=sk-ant-...
+const String kBuildApiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
+const String kPrefsKey = 'anthropic_api_key';
 const String model = 'claude-haiku-5-5';
 const Duration scanInterval = Duration(milliseconds: 2500);
 const Duration repeatCooldown = Duration(seconds: 20);
@@ -76,6 +79,7 @@ class _SignScreenState extends State<SignScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initTts();
+    _loadApiKey();
     _initCamera();
   }
 
@@ -126,11 +130,58 @@ class _SignScreenState extends State<SignScreen> with WidgetsBindingObserver {
     }
   }
 
+  String _apiKey = kBuildApiKey;
+
+  Future<void> _loadApiKey() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString(kPrefsKey);
+      if (saved != null && saved.isNotEmpty) _apiKey = saved;
+    } catch (_) {}
+    if (!mounted) return;
+    if (_apiKey.isEmpty) {
+      setState(() => _status = 'Введите API ключ (кнопка 🔑)');
+      WidgetsBinding.instance.addPostFrameCallback((_) => _askApiKey());
+    }
+  }
+
+  Future<void> _askApiKey() async {
+    final ctrl = TextEditingController(text: _apiKey);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Anthropic API ключ'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          obscureText: true,
+          decoration: const InputDecoration(hintText: 'sk-ant-...'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('Сохранить'),
+          ),
+        ],
+      ),
+    );
+    if (result == null) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(kPrefsKey, result);
+    } catch (_) {}
+    setState(() {
+      _apiKey = result;
+      _status = result.isEmpty ? 'Введите API ключ (кнопка 🔑)' : 'Готово';
+    });
+  }
+
   void _toggle() => _running ? _stop() : _start();
 
   void _start() {
-    if (apiKey.isEmpty) {
-      setState(() => _status = 'Нет API ключа (--dart-define=ANTHROPIC_API_KEY)');
+    if (_apiKey.isEmpty) {
+      _askApiKey();
       return;
     }
     WakelockPlus.enable();
@@ -223,7 +274,7 @@ class _SignScreenState extends State<SignScreen> with WidgetsBindingObserver {
         .post(
           Uri.parse('https://api.anthropic.com/v1/messages'),
           headers: {
-            'x-api-key': apiKey,
+            'x-api-key': _apiKey,
             'anthropic-version': '2023-06-01',
             'content-type': 'application/json',
           },
@@ -334,6 +385,13 @@ class _SignScreenState extends State<SignScreen> with WidgetsBindingObserver {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                FloatingActionButton(
+                  heroTag: 'key',
+                  mini: true,
+                  onPressed: _askApiKey,
+                  child: const Icon(Icons.key),
+                ),
+                const SizedBox(height: 12),
                 FloatingActionButton(
                   heroTag: 'mute',
                   mini: true,

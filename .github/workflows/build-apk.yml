@@ -1,0 +1,95 @@
+name: Build APK
+
+# Builds both APKs on GitHub's servers and publishes them as the "apk-latest" release.
+# Runs on every push to main, after "Train model" finishes, or manually (Actions → Build APK → Run workflow).
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'training/**'
+      - '.github/workflows/train-model.yml'
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Train model"]
+    types: [completed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download trained model (if one exists)
+        run: |
+          if gh release download model-latest -p model.tflite -p labels.txt -D assets --clobber; then
+            echo "HAS_MODEL=yes" >> "$GITHUB_ENV"
+            echo "Model found: $(du -h assets/model.tflite | cut -f1), $(wc -l < assets/labels.txt) classes"
+          else
+            echo "HAS_MODEL=no" >> "$GITHUB_ENV"
+            echo "No trained model yet — offline APK will show 'Модель не загружена'"
+          fi
+          ls -la assets
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter --version
+
+      - name: Build offline APK
+        run: |
+          flutter pub get
+          flutter build apk --release
+          cp build/app/outputs/flutter-apk/app-release.apk signreader-offline.apk
+
+      - name: Build online APK
+        working-directory: online_version
+        run: |
+          flutter pub get
+          flutter build apk --release
+          cp build/app/outputs/flutter-apk/app-release.apk ../signreader-online.apk
+
+      - name: Publish release
+        run: |
+          if [ "$HAS_MODEL" = "yes" ]; then
+            MODEL_NOTE="✅ Offline APK includes the trained model from the **model-latest** release."
+          else
+            MODEL_NOTE="⚠️ No trained model yet. The offline APK starts but can't read signs. Run **Actions → Train model** first."
+          fi
+          cat > notes.md <<EOF
+          Built from commit ${GITHUB_SHA::7}.
+
+          | File | What it is |
+          |---|---|
+          | **signreader-offline.apk** | Works without internet, on-device model, Russian voice |
+          | **signreader-online.apk** | Uses the Claude API (needs internet + your API key, entered in the app via 🔑) |
+
+          $MODEL_NOTE
+
+          **Install:** open this page on the phone → tap the APK → allow "Install unknown apps" for the browser.
+          For offline voice: Settings → Text-to-speech → Google → Install voice data → Russian.
+          EOF
+          sed -i 's/^          //' notes.md
+          gh release delete apk-latest --yes --cleanup-tag || true
+          gh release create apk-latest signreader-offline.apk signreader-online.apk \
+            --prerelease --title "APK (latest build)" --notes-file notes.md --target "$GITHUB_SHA"

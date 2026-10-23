@@ -12,6 +12,10 @@ cd signreader/online_version
 flutter pub get
 ```
 
+## API key
+The key is entered in the app (🔑 button) and stored on the phone, so the APK from Releases is safe to share.
+You can still bake one in for your own build with `--dart-define=ANTHROPIC_API_KEY=...`.
+
 ## Run
 
 ```bash

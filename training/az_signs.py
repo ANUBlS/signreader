@@ -80,14 +80,33 @@ def cmd_rtsd(a):
             index.setdefault(p.name, p)
     print(f"Найдено изображений: {len(index)}")
 
-    anno = {}
-    for split, fname in (("train", a.train_json), ("val", a.val_json)):
+    # Все COCO-файлы разметки в архиве (имена в разных копиях RTSD отличаются)
+    coco_files = []
+    for j in root.rglob("*.json"):
+        try:
+            if j.stat().st_size < 100:
+                continue
+            with open(j, encoding="utf-8") as fh:
+                head = fh.read(4096)
+            if '"images"' in head or '"annotations"' in head or '"categories"' in head:
+                coco_files.append(j)
+        except OSError:
+            pass
+    print("COCO-файлы:", [str(c.relative_to(root)) for c in coco_files])
+
+    def find(fname, keyword):
         f = root / fname
-        if not f.exists():
-            cand = list(root.rglob(fname))
-            if not cand:
-                sys.exit(f"Не найден {fname} в {root}")
-            f = cand[0]
+        if f.exists():
+            return f
+        cand = list(root.rglob(fname)) or [c for c in coco_files if keyword in c.name.lower()]
+        if not cand:
+            sys.exit(f"Не найден {fname} (или *{keyword}*.json) в {root}")
+        return cand[0]
+
+    anno = {}
+    for split, fname, kw in (("train", a.train_json, "train"), ("val", a.val_json, "val")):
+        f = find(fname, kw)
+        print(f"{split}: {f}")
         anno[split] = json.loads(f.read_text(encoding="utf-8"))
 
     cats = sorted(anno["train"]["categories"], key=lambda c: c["id"])
@@ -133,7 +152,9 @@ def cmd_rtsd(a):
 def cmd_train(a):
     from ultralytics import YOLO
     model = YOLO(a.weights)
+    extra = {"time": a.time} if a.time else {}
     r = model.train(
+        **extra,
         data=a.data,
         imgsz=a.imgsz,
         epochs=a.epochs,
@@ -329,6 +350,7 @@ def main():
     p.add_argument("--fraction", type=float, default=1.0, help="доля данных (для быстрой проверки)")
     p.add_argument("--cache", default=False, help="ram / disk / False")
     p.add_argument("--workers", type=int, default=8)
+    p.add_argument("--time", type=float, default=None, help="лимит обучения в часах (вместо epochs)")
     p.set_defaults(func=cmd_train)
 
     p = sp.add_parser("frames", help="видео -> кадры")
