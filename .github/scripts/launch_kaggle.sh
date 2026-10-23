@@ -10,6 +10,8 @@ pip install -q kaggle || exit 10
 [ -n "${KAGGLE_USERNAME:-}" ] || { echo "KAGGLE_USERNAME missing"; exit 11; }
 if [ -z "${KAGGLE_KEY:-}" ]; then echo "KAGGLE_KEY missing"; exit 12; fi
 echo "secrets present (key length ${#KAGGLE_KEY})"
+# New Kaggle API tokens (not the legacy 32-char key) must be passed as KAGGLE_API_TOKEN
+if [ ${#KAGGLE_KEY} -ne 32 ]; then export KAGGLE_API_TOKEN="$KAGGLE_KEY"; echo "using KAGGLE_API_TOKEN"; fi
 
 echo "== build notebook"
 rm -rf kernel && mkdir -p kernel

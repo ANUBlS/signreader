@@ -53,6 +53,7 @@ jobs:
           STAMP: ${{ steps.launched.outputs.stamp }}
         run: |
           pip install -q kaggle
+          if [ ${#KAGGLE_KEY} -ne 32 ]; then export KAGGLE_API_TOKEN="$KAGGLE_KEY"; fi
           ST=$(kaggle kernels status "${KAGGLE_USERNAME}/signreader-train" 2>&1 || true)
           echo "$ST"
           case "$(echo "$ST" | tr 'A-Z' 'a-z')" in

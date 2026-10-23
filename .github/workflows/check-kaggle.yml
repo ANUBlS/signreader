@@ -40,6 +40,7 @@ jobs:
             if [ -z "$KAGGLE_KEY" ]; then echo "- KAGGLE_KEY: **MISSING**"; else echo "- KAGGLE_KEY: set (${#KAGGLE_KEY} chars, expected 32)"; fi
             echo
             if [ -n "$KAGGLE_USERNAME" ] && [ -n "$KAGGLE_KEY" ]; then
+              if [ ${#KAGGLE_KEY} -ne 32 ]; then export KAGGLE_API_TOKEN="$KAGGLE_KEY"; fi
               echo '## Dataset files (watchman/rtsd-dataset)'
               echo '```'
               if kaggle datasets files watchman/rtsd-dataset --page-size 200 2>&1 | sed "s/$KAGGLE_KEY/***/g"; then

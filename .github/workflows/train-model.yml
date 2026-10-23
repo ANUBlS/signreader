@@ -72,6 +72,7 @@ jobs:
 
       - name: Download RTSD from Kaggle
         run: |
+          if [ ${#KAGGLE_KEY} -ne 32 ]; then export KAGGLE_API_TOKEN="$KAGGLE_KEY"; fi
           kaggle datasets download -d watchman/rtsd-dataset -p "$WORK/rtsd" --unzip
           rm -f "$WORK"/rtsd/*.zip
           du -sh "$WORK/rtsd"; ls "$WORK/rtsd"
