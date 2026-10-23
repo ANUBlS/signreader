@@ -386,7 +386,7 @@ class _SignScreenState extends State<SignScreen> with WidgetsBindingObserver {
               child: Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.72),
+                  color: Colors.black.withValues(alpha: 0.72),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: Colors.redAccent, width: 2),
                 ),
