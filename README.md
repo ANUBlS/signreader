@@ -11,6 +11,20 @@ On your phone open **https://github.com/ANUBlS/signreader/releases/tag/apk-lates
 `signreader-offline.apk` (or `signreader-online.apk`). Allow "Install unknown apps" when asked.
 GitHub rebuilds the APKs automatically on every push.
 
+### Use a 70mai dashcam instead of the phone camera
+The app can read signs from the dashcam's live video over its Wi-Fi, so the phone can lie anywhere.
+1. Turn on Wi-Fi on the dashcam (in the 70mai app or the camera menu).
+2. Connect the phone to the dashcam's network (`70mai_…`). If Android says *no internet*, choose **Stay connected**.
+3. Close the official 70mai app, because the camera serves only one viewer at a time.
+4. In Signreader tap **70mai** (top right). ⚙ picks the model/URL:
+   - Pro / A500S / M300 / A800: `rtsp://192.168.0.1:554/livestream/12`
+   - 1S: `rtsp://192.72.1.1/liveRTSP/av4`
+   - Other model: try the first, or enter its RTSP URL.
+
+Notes: the live stream is a low-resolution preview (about 640×360), so far-away signs are detected
+later than with the phone camera. If the video freezes, turn off "RTSP по TCP" in ⚙.
+While connected to the dashcam the phone has no internet, which this offline app doesn't need.
+
 ### 2. Train the starter model (one time, ~5 hours, runs on GitHub)
 1. Create a free account on **kaggle.com** → *Settings* → *API* → **Create New Token**. This downloads `kaggle.json`.
 2. In this repo go to **Settings → Secrets and variables → Actions → New repository secret** and add:
@@ -30,6 +44,7 @@ common signs, but for good accuracy on Azerbaijani roads do stage 2 below with y
 signreader/
 ├── lib/
 │   ├── main.dart          camera, UI, confirmation logic, speech queue
+│   ├── dashcam_source.dart  70mai RTSP video (media_kit) + frame grabbing
 │   ├── detector.dart      background isolate: YUV/BGRA → letterbox → TFLite → NMS
 │   └── sign_phrases.dart  sign code (3.24, 2.1 …) → Russian phrase
 ├── assets/                ← put model.tflite + labels.txt here (from training)

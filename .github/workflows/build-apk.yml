@@ -69,8 +69,11 @@ jobs:
 
       - name: Build offline APK
         run: |
-          flutter build apk --release 2>&1 | tee logs/build-offline.log
-          cp build/app/outputs/flutter-apk/app-release.apk signreader-offline.apk
+          flutter build apk --release --split-per-abi 2>&1 | tee logs/build-offline.log
+          ls -la build/app/outputs/flutter-apk/
+          # Almost all phones since ~2017 are arm64; armeabi-v7a for very old ones
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk signreader-offline.apk
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk signreader-offline-old-phones.apk
 
       - name: Build online APK
         working-directory: online_version
@@ -90,7 +93,8 @@ jobs:
 
           | File | What it is |
           |---|---|
-          | **signreader-offline.apk** | Works without internet, on-device model, Russian voice |
+          | **signreader-offline.apk** | Works without internet, on-device model, Russian voice. Phone camera **or 70mai dashcam** |
+          | signreader-offline-old-phones.apk | Same, for old 32-bit phones only (use if the main one won't install) |
           | **signreader-online.apk** | Uses the Claude API (needs internet + your API key, entered in the app via 🔑) |
 
           $MODEL_NOTE
@@ -100,7 +104,7 @@ jobs:
           EOF
           sed -i 's/^          //' notes.md
           .github/scripts/publish_release.sh apk-latest "APK (latest build)" notes.md \
-            signreader-offline.apk signreader-online.apk
+            signreader-offline.apk signreader-offline-old-phones.apk signreader-online.apk
 
       - name: Publish logs on failure
         if: failure()
