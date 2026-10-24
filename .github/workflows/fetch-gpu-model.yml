@@ -142,17 +142,26 @@ jobs:
             [ -f "$D/rtsd_best.pt" ] && FILES="$FILES $D/rtsd_best.pt"
             [ -f "$D/results.csv" ] && FILES="$FILES $D/results.csv"
             .github/scripts/publish_release.sh model-latest "Model (latest)" model-notes.md $FILES
-            echo "new_model=true" >> "$GITHUB_OUTPUT"
+            NEW_MODEL=true
             echo "$METRICS" >> status.md
           else
-            echo "new_model=false" >> "$GITHUB_OUTPUT"
+            NEW_MODEL=false
           fi
 
           .github/scripts/publish_release.sh gpu-train "GPU training (status)" status.md \
             launch-stamp.txt handled-stamp.txt notebook-log.txt
+          echo "new_model=$NEW_MODEL" >> "$GITHUB_OUTPUT"
+          echo "new_model=$NEW_MODEL"
 
   build:
     needs: fetch
     if: needs.fetch.outputs.new_model == 'true'
-    uses: ./.github/workflows/build-apk.yml
-    secrets: inherit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Start "Build APK"
+        run: gh workflow run build-apk.yml --repo "$GITHUB_REPOSITORY" --ref main
