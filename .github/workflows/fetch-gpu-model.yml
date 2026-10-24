@@ -63,7 +63,13 @@ jobs:
           case "$(echo "$ST" | tr 'A-Z' 'a-z')" in
             *complete*) STATE=complete ;;
             *error*|*fail*|*cancel*) STATE=error ;;
-            *) echo "Still running / queued."; echo "new_model=false" >> "$GITHUB_OUTPUT"; exit 0 ;;
+            *) echo "Still running / queued."
+               echo "new_model=false" >> "$GITHUB_OUTPUT"
+               # Record the raw status so it can be checked without the Actions UI
+               gh release view gpu-train --json body --jq '.body' | sed '/^Last check:/d' > notes.md || true
+               echo "Last check: $(date -u '+%Y-%m-%d %H:%M UTC') — $(echo "$ST" | tail -1)" >> notes.md
+               gh release edit gpu-train --notes-file notes.md || true
+               exit 0 ;;
           esac
 
           mkdir -p kout
