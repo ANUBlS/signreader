@@ -17,8 +17,8 @@ on:
   workflow_dispatch:
     inputs:
       hours:
-        description: 'Training time on the GPU (Kaggle sessions stop at 12 h)'
-        default: '9'
+        description: 'Training time on the GPU (Kaggle sessions stop at 12 h; keep ≤ 8)'
+        default: '7'
       imgsz:
         description: 'Image size'
         default: '640'
@@ -34,7 +34,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
       KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
-      HOURS: ${{ inputs.hours || '9' }}
+      HOURS: ${{ inputs.hours || '7' }}
       IMGSZ: ${{ inputs.imgsz || '640' }}
     steps:
       - uses: actions/checkout@v5

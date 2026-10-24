@@ -76,9 +76,25 @@ jobs:
             echo "new_model=false" >> "$GITHUB_OUTPUT"; exit 0
           fi
 
-          MODEL=$(find kout -name model.tflite | head -1)
-          LOG=$(find kout -maxdepth 2 -name '*.log' | head -1)
+          LOG=$(find kout -maxdepth 2 -name '*.log' ! -name progress.log | head -1)
           PROG=$(find kout -name progress.log | head -1)
+          WEIGHTS=$(find kout -name rtsd_best.pt | head -1)
+          [ -n "$WEIGHTS" ] || WEIGHTS=$(find kout -path '*weights/best.pt' | head -1)
+          [ -n "$WEIGHTS" ] || WEIGHTS=$(find kout -name rtsd_last.pt | head -1)
+          [ -n "$WEIGHTS" ] || WEIGHTS=$(find kout -path '*weights/last.pt' | head -1)
+          echo "state=$STATE weights=${WEIGHTS:-none}"
+
+          MODEL=""
+          if [ -n "$WEIGHTS" ]; then
+            # Export to TFLite here (reliable on GitHub; slow/fragile inside Kaggle)
+            pip install -q torch torchvision --index-url https://download.pytorch.org/whl/cpu
+            pip install -q ultralytics
+            mkdir -p gpuout
+            python training/az_signs.py export --weights "$WEIGHTS" --imgsz 640 --out gpuout && MODEL=gpuout/model.tflite
+            cp "$WEIGHTS" gpuout/rtsd_best.pt
+            RES=$(find kout -name results.csv | head -1); [ -n "$RES" ] && cp "$RES" gpuout/results.csv
+            cp "$(find kout -name stamp.txt | head -1)" gpuout/stamp.txt
+          fi
           {
             echo "Run $STAMP: **$STATE**"
             echo
@@ -90,8 +106,8 @@ jobs:
           echo "$STAMP" > handled-stamp.txt
           [ -s launch-stamp.txt ] || echo "$STAMP" > launch-stamp.txt
 
-          if [ "$STATE" = complete ] && [ -n "$MODEL" ]; then
-            D=$(dirname "$MODEL")
+          if [ -n "$MODEL" ] && [ -f "$MODEL" ]; then
+            D=gpuout
             METRICS=$(python - "$D/results.csv" <<'EOF'
           import csv, sys
           try:
@@ -104,7 +120,7 @@ jobs:
           EOF
           )
             {
-              echo "GPU model (Kaggle) — run $STAMP. $METRICS"
+              echo "GPU model (Kaggle, $STATE) — run $STAMP. $METRICS"
               echo
               echo "- model.tflite + labels.txt: bundled into the offline APK automatically"
               echo "- rtsd_best.pt: use as --weights for autolabel / fine-tuning on Azerbaijani frames"

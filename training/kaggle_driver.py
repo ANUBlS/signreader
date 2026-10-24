@@ -51,18 +51,24 @@ def run(*args):
 
 
 run("rtsd", "--rtsd-root", str(rtsd), "--out", "/tmp/ds")
+say("dataset ready")
 
+# Weights go straight into /kaggle/working so they are part of the notebook output,
+# even if the session is stopped early. The TFLite export happens later on GitHub.
 devices = "0"  # single GPU: simpler and reliable (no DDP)
-run("train", "--data", "/tmp/ds/data.yaml", "--weights", "yolo11n.pt",
-    "--imgsz", IMGSZ, "--batch", "64", "--workers", "4", "--device", devices,
-    "--time", HOURS, "--epochs", "300", "--patience", "30",
-    "--project", "/tmp/runs", "--name", "rtsd")
-
-best = _P("/tmp/runs/rtsd/weights/best.pt")
-run("export", "--weights", str(best), "--imgsz", IMGSZ, "--out", str(OUT))
-_sh.copy2(best, OUT / "rtsd_best.pt")
 try:
-    _sh.copy2("/tmp/runs/rtsd/results.csv", OUT / "results.csv")
-except OSError:
-    pass
+    run("train", "--data", "/tmp/ds/data.yaml", "--weights", "yolo11n.pt",
+        "--imgsz", IMGSZ, "--batch", "64", "--workers", "4", "--device", devices,
+        "--time", HOURS, "--epochs", "300", "--patience", "30",
+        "--project", "/kaggle/working/runs", "--name", "rtsd")
+finally:
+    w = _P("/kaggle/working/runs/rtsd/weights")
+    for name in ("best.pt", "last.pt"):
+        if (w / name).exists():
+            _sh.copy2(w / name, OUT / ("rtsd_best.pt" if name == "best.pt" else "rtsd_last.pt"))
+    try:
+        _sh.copy2("/kaggle/working/runs/rtsd/results.csv", OUT / "results.csv")
+    except OSError:
+        pass
+    say("weights saved to output")
 say("DONE")
