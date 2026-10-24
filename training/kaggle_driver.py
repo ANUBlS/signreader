@@ -10,6 +10,8 @@ import time as _time
 from pathlib import Path as _P
 
 HOURS = "__HOURS__"
+SESSION_BUDGET_H = 10.0  # Kaggle kills sessions at 12 h and then discards ALL output
+_T0 = _time.time()
 IMGSZ = "__IMGSZ__"
 STAMP = "__STAMP__"
 
@@ -52,6 +54,12 @@ def run(*args):
 
 run("rtsd", "--rtsd-root", str(rtsd), "--out", "/tmp/ds")
 say("dataset ready")
+
+# Train only as long as the whole session stays under SESSION_BUDGET_H
+_elapsed_h = (_time.time() - _T0) / 3600
+_train_h = max(0.5, min(float(HOURS), SESSION_BUDGET_H - _elapsed_h - 0.5))
+say(f"setup took {_elapsed_h:.2f} h -> training for {_train_h:.2f} h")
+HOURS = f"{_train_h:.2f}"
 
 # Weights go straight into /kaggle/working so they are part of the notebook output,
 # even if the session is stopped early. The TFLite export happens later on GitHub.
