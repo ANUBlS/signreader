@@ -58,6 +58,11 @@ jobs:
         run: |
           pip install -q kaggle
           if [ ${#KAGGLE_KEY} -ne 32 ]; then export KAGGLE_API_TOKEN="$KAGGLE_KEY"; fi
+          note() {  # record a status line in the gpu-train release
+            gh release view gpu-train --json body --jq '.body' | sed '/^Last check:/d' > notes.md || true
+            echo "Last check: $(date -u '+%Y-%m-%d %H:%M UTC') — $1" >> notes.md
+            gh release edit gpu-train --notes-file notes.md || echo "could not edit release"
+          }
           ST=$(kaggle kernels status "${KAGGLE_USERNAME}/signreader-train" 2>&1 || true)
           echo "$ST"
           case "$(echo "$ST" | tr 'A-Z' 'a-z')" in
@@ -65,10 +70,7 @@ jobs:
             *error*|*fail*|*cancel*) STATE=error ;;
             *) echo "Still running / queued."
                echo "new_model=false" >> "$GITHUB_OUTPUT"
-               # Record the raw status so it can be checked without the Actions UI
-               gh release view gpu-train --json body --jq '.body' | sed '/^Last check:/d' > notes.md || true
-               echo "Last check: $(date -u '+%Y-%m-%d %H:%M UTC') — $(echo "$ST" | tail -1)" >> notes.md
-               gh release edit gpu-train --notes-file notes.md || true
+               note "$(echo "$ST" | tail -1)"
                exit 0 ;;
           esac
 
@@ -77,10 +79,14 @@ jobs:
           find kout -maxdepth 3 -type f | head -50
           GOT=$(cat $(find kout -name stamp.txt | head -1) 2>/dev/null || echo "")
           echo "notebook stamp: $GOT   launched stamp: $STAMP"
-          if [ "$GOT" != "$STAMP" ]; then
+          FILES_SEEN=$(find kout -type f | sed 's|^kout/||' | head -20 | tr '\n' ' ')
+          if [ "$GOT" != "$STAMP" ] && [ -n "$GOT" ]; then
             echo "Output is from an older run; waiting."
+            note "status $STATE, but output is from an older run ($GOT)"
             echo "new_model=false" >> "$GITHUB_OUTPUT"; exit 0
           fi
+          [ -n "$GOT" ] || note "status $STATE, no stamp in output (files: ${FILES_SEEN:-none})"
+
 
           LOG=$(find kout -maxdepth 2 -name '*.log' ! -name progress.log | head -1)
           PROG=$(find kout -name progress.log | head -1)
