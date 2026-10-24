@@ -19,7 +19,7 @@ The app can read signs from the dashcam's live video over its Wi-Fi, so the phon
 4. In Signreader tap **70mai** (top right). ⚙ picks the model/URL:
    - Pro / A500S / M300 / A800: `rtsp://192.168.0.1:554/livestream/12`
    - 1S: `rtsp://192.72.1.1/liveRTSP/av4`
-   - Other model: try the first, or enter its RTSP URL.
+   - A200 or another model: tap **Найти автоматически** (auto-find). It checks the dashcam for a stream; if none is found, copy the report it shows and send it to me.
 
 Notes: the live stream is a low-resolution preview (about 640×360), so far-away signs are detected
 later than with the phone camera. If the video freezes, turn off "RTSP по TCP" in ⚙.

@@ -466,6 +466,9 @@ class _SignScreenState extends State<SignScreen> with WidgetsBindingObserver {
   Future<void> _openDashcamSettings() async {
     final urlCtrl = TextEditingController(text: _dashUrl);
     var tcp = _dashTcp;
+    var probing = false;
+    var probeMsg = '';
+    var probeReport = '';
     final saved = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -499,6 +502,58 @@ class _SignScreenState extends State<SignScreen> with WidgetsBindingObserver {
                   decoration: const InputDecoration(labelText: 'RTSP адрес'),
                   onChanged: (_) => setD(() {}),
                 ),
+                const SizedBox(height: 10),
+                FilledButton.tonalIcon(
+                  icon: probing
+                      ? const SizedBox(
+                          width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.search),
+                  label: Text(probing ? 'Поиск…' : 'Найти автоматически (A200 и др.)'),
+                  onPressed: probing
+                      ? null
+                      : () async {
+                          setD(() {
+                            probing = true;
+                            probeMsg = '';
+                            probeReport = '';
+                          });
+                          final r = await DashcamSource.autodetect(
+                            progress: (m) => setD(() => probeMsg = m),
+                          );
+                          setD(() {
+                            probing = false;
+                            probeReport = r.report;
+                            if (r.url != null) {
+                              urlCtrl.text = r.url!;
+                              probeMsg = 'Найдено: ${r.url}';
+                            } else {
+                              probeMsg = 'Поток не найден — отчёт ниже';
+                            }
+                          });
+                        },
+                ),
+                if (probeMsg.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(probeMsg, style: const TextStyle(fontSize: 12)),
+                  ),
+                if (probeReport.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    color: Colors.black26,
+                    constraints: const BoxConstraints(maxHeight: 140),
+                    child: SingleChildScrollView(
+                      child: SelectableText(probeReport,
+                          style: const TextStyle(fontSize: 11, fontFamily: 'monospace')),
+                    ),
+                  ),
+                  TextButton.icon(
+                    icon: const Icon(Icons.copy, size: 16),
+                    label: const Text('Скопировать отчёт'),
+                    onPressed: () => Clipboard.setData(ClipboardData(text: probeReport)),
+                  ),
+                ],
                 SwitchListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,

@@ -6,6 +6,8 @@
 //   70mai 1S                           rtsp://192.72.1.1/liveRTSP/av4
 
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
@@ -21,6 +23,23 @@ class DashcamPreset {
 const List<DashcamPreset> kDashcamPresets = [
   DashcamPreset('70mai Pro / A500S / M300 / A800', 'rtsp://192.168.0.1:554/livestream/12'),
   DashcamPreset('70mai 1S', 'rtsp://192.72.1.1/liveRTSP/av4'),
+];
+
+/// Result of the automatic stream search.
+class ProbeResult {
+  final String? url; // working RTSP URL, if found
+  final String report; // human-readable log of what was tried
+  const ProbeResult(this.url, this.report);
+}
+
+// Hosts and paths used by 70mai and the chipsets inside dashcams
+// (HiSilicon, SigmaStar, Novatek, Ambarella, Allwinner).
+const _probeHosts = ['192.168.0.1', '192.72.1.1', '192.168.1.254', '192.168.169.1', '192.168.42.1', '192.168.1.1'];
+const _probePorts = [554, 8554];
+const _probePaths = [
+  '/livestream/12', '/livestream/11', '/liveRTSP/av4', '/liveRTSP/av0',
+  '/live', '/live/ch0', '/live/ch00_0', '/stream1', '/stream0', '/h264',
+  '/av0_0', '/0', '/11', '/12', '/xxx.mov', '/',
 ];
 
 /// Кадр в формате BGR0 (как BGRA): 4 байта на пиксель, построчно со stride.
@@ -56,6 +75,83 @@ class DashcamSource {
     } catch (_) {
       return false;
     }
+  }
+
+  static Future<String?> gatewayIp() async {
+    try {
+      return await _net.invokeMethod<String>('gateway');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<bool> _portOpen(String host, int port) async {
+    try {
+      final s = await Socket.connect(host, port, timeout: const Duration(milliseconds: 1500));
+      s.destroy();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Sends RTSP DESCRIBE and returns the status line (e.g. "RTSP/1.0 200 OK").
+  static Future<String?> _describe(String host, int port, String url) async {
+    Socket? s;
+    try {
+      s = await Socket.connect(host, port, timeout: const Duration(milliseconds: 1500));
+      s.write('DESCRIBE $url RTSP/1.0\r\nCSeq: 2\r\nAccept: application/sdp\r\n'
+          'User-Agent: signreader\r\n\r\n');
+      await s.flush();
+      final first = await s
+          .cast<List<int>>()
+          .transform(latin1.decoder)
+          .transform(const LineSplitter())
+          .first
+          .timeout(const Duration(seconds: 2));
+      return first.trim();
+    } catch (_) {
+      return null;
+    } finally {
+      s?.destroy();
+    }
+  }
+
+  /// Finds the dashcam's RTSP stream: gateway IP + known hosts, ports and paths.
+  static Future<ProbeResult> autodetect({void Function(String)? progress}) async {
+    await bindToWifi();
+    final log = StringBuffer();
+    final gw = await gatewayIp();
+    log.writeln('Wi-Fi gateway: ${gw ?? 'unknown'}');
+    final hosts = <String>{if (gw != null && gw.isNotEmpty) gw, ..._probeHosts}.toList();
+
+    for (final host in hosts) {
+      progress?.call('Проверка $host…');
+      final open = <int>[];
+      for (final port in [..._probePorts, 80, 21, 23, 8080]) {
+        if (await _portOpen(host, port)) open.add(port);
+      }
+      if (open.isEmpty) continue;
+      log.writeln('$host open ports: ${open.join(', ')}');
+      for (final port in _probePorts.where(open.contains)) {
+        for (final path in _probePaths) {
+          final url = port == 554 ? 'rtsp://$host:554$path' : 'rtsp://$host:$port$path';
+          progress?.call('Пробую $url');
+          final st = await _describe(host, port, url);
+          log.writeln('  $path -> ${st ?? 'no answer'}');
+          if (st != null && st.contains(' 200')) {
+            log.writeln('FOUND: $url');
+            return ProbeResult(url, log.toString());
+          }
+        }
+      }
+    }
+    if (log.toString().split('\n').where((l) => l.contains('open ports')).isEmpty) {
+      log.writeln('No dashcam found. Is the phone connected to the dashcam Wi-Fi?');
+    } else {
+      log.writeln('No RTSP stream found on the open ports.');
+    }
+    return ProbeResult(null, log.toString());
   }
 
   static Future<void> unbindNetwork() async {

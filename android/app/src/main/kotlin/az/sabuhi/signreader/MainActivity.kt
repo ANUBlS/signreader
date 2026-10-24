@@ -26,6 +26,19 @@ class MainActivity : FlutterActivity() {
                         result.success(if (wifi != null) cm.bindProcessToNetwork(wifi) else false)
                     }
                     "unbind" -> result.success(cm.bindProcessToNetwork(null))
+                    // IP of the Wi-Fi router = the dashcam when connected to its hotspot
+                    "gateway" -> {
+                        @Suppress("DEPRECATION")
+                        val wifi = cm.allNetworks.firstOrNull {
+                            cm.getNetworkCapabilities(it)
+                                ?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+                        }
+                        val lp = wifi?.let { cm.getLinkProperties(it) }
+                        val gw = lp?.routes
+                            ?.firstOrNull { it.isDefaultRoute && it.gateway != null }
+                            ?.gateway?.hostAddress
+                        result.success(gw)
+                    }
                     else -> result.notImplemented()
                 }
             }
