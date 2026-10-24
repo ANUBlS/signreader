@@ -11,6 +11,7 @@ on:
       - 'training/**'
       - '.github/workflows/train-model.yml'
       - '.github/workflows/check-kaggle.yml'
+      - '.github/workflows/fetch-gpu-model.yml'
   workflow_dispatch:
   workflow_call:
   workflow_run:

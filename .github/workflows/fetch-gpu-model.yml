@@ -5,6 +5,10 @@ name: Fetch GPU model
 # If it failed, publish its log to the "gpu-train" release.
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'training/FETCH_NOW'
   schedule:
     - cron: '*/20 * * * *'
   workflow_dispatch:
